@@ -1,64 +1,97 @@
 import 'package:flutter/material.dart';
+import 'package:zero_to_5k/data/z25k_data.dart';
+import 'package:zero_to_5k/utils/workout_formatter.dart';
+import 'run_session.dart';
+import 'package:zero_to_5k/screens/settings_screen.dart';
 
-class MainRunScreen extends StatelessWidget {
+class MainRunScreen extends StatefulWidget {
   const MainRunScreen({super.key});
 
   @override
+  State<MainRunScreen> createState() => _MainRunScreenState();
+}
+
+class _MainRunScreenState extends State<MainRunScreen> {
+  late Workout selectedWorkout;
+  late int selectedWeekIndex;
+  late int selectedDayIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedWeekIndex = 0;
+    selectedDayIndex = 0;
+    selectedWorkout = Z25KProgram.weeks[0][0];
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final days = [
-      "WEEK 1\nDAY 1",
-      "WEEK 1\nDAY 2",
-      "WEEK 1\nDAY 3",
-      "WEEK 2\nDAY 1",
-    ];
+    final List<String> dayLabels = [];
+    final List<Workout> workouts = [];
+
+    for (int week = 0; week < Z25KProgram.weeks.length; week++) {
+      for (int day = 0; day < Z25KProgram.weeks[week].length; day++) {
+        dayLabels.add('WEEK ${week + 1}\nDAY ${day + 1}');
+        workouts.add(Z25KProgram.weeks[week][day]);
+      }
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        leading: const Icon(Icons.menu),
-        title: const Text('Z25K'),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 16.0),
-            child: Icon(Icons.workspace_premium_rounded, color: Colors.amber),
+        title: const Text("Zero to 5K"),
+        centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'settings') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              return [
+                const PopupMenuItem<String>(
+                  value: 'settings',
+                  child: Text('Settings'),
+                ),
+              ];
+            },
           ),
         ],
       ),
       body: Column(
         children: [
+          // Workout Description
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.grey.shade100,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
-                  "DURATION: 30 MINUTES",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  "DURATION: ${getTotalWorkoutTime(selectedWorkout)} MINUTES",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
-                SizedBox(height: 8),
-                Text.rich(
-                  TextSpan(
-                    text: "Brisk five-minute warmup walk.\n",
-                    style: TextStyle(fontSize: 16),
-                    children: [
-                      TextSpan(
-                        text:
-                            "Then alternate 60 seconds of jogging and 90 seconds of walking for a total of 20 minutes.",
-                      ),
-                    ],
-                  ),
+                const SizedBox(height: 8),
+                Text(
+                  formatWorkoutDescription(selectedWorkout),
+                  style: const TextStyle(fontSize: 16),
                 ),
               ],
             ),
           ),
+          // Image
           Expanded(
             child: Image.asset(
-              'assets/images/start.jpg', // ensure the file is copied here
+              'assets/images/start.jpg',
               fit: BoxFit.cover,
               width: double.infinity,
             ),
           ),
+          // Footer
           Container(
             padding: const EdgeInsets.symmetric(vertical: 16),
             color: Colors.white,
@@ -66,13 +99,17 @@ class MainRunScreen extends StatelessWidget {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    // TODO: Navigate to workout tracking
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RunSessionScreen(workout: selectedWorkout),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 60, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -85,31 +122,41 @@ class MainRunScreen extends StatelessWidget {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: days.length,
+                    itemCount: dayLabels.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 12),
                     itemBuilder: (context, index) {
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            days[index],
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontWeight: index == 0
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 14,
-                              color: index == 0 ? Colors.black : Colors.grey,
+                      final isSelected = index == (selectedWeekIndex * 3 + selectedDayIndex);
+                      return GestureDetector(
+                        onTap: () {
+                          final newWeekIndex = index ~/ 3;
+                          final newDayIndex = index % 3;
+                          setState(() {
+                            selectedWeekIndex = newWeekIndex;
+                            selectedDayIndex = newDayIndex;
+                            selectedWorkout = Z25KProgram.weeks[newWeekIndex][newDayIndex];
+                          });
+                        },
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              dayLabels[index],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 14,
+                                color: isSelected ? Colors.black : Colors.grey,
+                              ),
                             ),
-                          ),
-                          if (index == 0)
-                            Container(
-                              margin: const EdgeInsets.only(top: 6),
-                              height: 4,
-                              width: 40,
-                              color: Colors.redAccent,
-                            )
-                        ],
+                            if (isSelected)
+                              Container(
+                                margin: const EdgeInsets.only(top: 6),
+                                height: 4,
+                                width: 40,
+                                color: Colors.redAccent,
+                              )
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -122,3 +169,4 @@ class MainRunScreen extends StatelessWidget {
     );
   }
 }
+
