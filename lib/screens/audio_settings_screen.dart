@@ -3,7 +3,20 @@ import 'package:provider/provider.dart';
 import '../services/audio_settings_service.dart';
 
 class AudioSettingsScreen extends StatelessWidget {
-  const AudioSettingsScreen({super.key});
+  final List<String> voiceOptions = [
+    'US Female',
+    'US Male',
+    'UK Female',
+    'UK Male',
+    'IN Female',
+    'IN Male',
+  ];
+
+  final List<String> styleOptions = [
+    'Calm',
+    'Energetic',
+    'Neutral',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -11,79 +24,68 @@ class AudioSettingsScreen extends StatelessWidget {
     final settings = audioService.settings;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Audio Settings'),
-      ),
-      body: ListView(
-        children: [
-          SwitchListTile(
-            title: const Text('Enable Voice Cues (TTS)'),
-            value: settings.enableTTS,
-            onChanged: (value) {
-              audioService.update(enableTTS: value);
-            },
-          ),
-          ListTile(
-            title: const Text('Select Voice'),
-            subtitle: Text(settings.voice),
-            onTap: () => _showVoicePicker(context, settings.voice, (selected) {
-              audioService.update(voice: selected);
-            }),
-          ),
-          ListTile(
-            title: const Text('Motivational Style'),
-            subtitle: Text(settings.style),
-            onTap: () => _showStylePicker(context, settings.style, (selected) {
-              audioService.update(style: selected);
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showVoicePicker(BuildContext context, String current, Function(String) onSelected) {
-    final options = ['US Female', 'US Male', 'UK Female', 'UK Male'];
-
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => ListView(
-        children: options.map((voice) {
-          return RadioListTile<String>(
-            title: Text(voice),
-            value: voice,
-            groupValue: current,
-            onChanged: (value) {
-              if (value != null) {
-                Navigator.pop(context);
-                onSelected(value);
-              }
-            },
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _showStylePicker(BuildContext context, String current, Function(String) onSelected) {
-    final options = ['Calm', 'Energetic', 'Friendly', 'Strict'];
-
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => ListView(
-        children: options.map((style) {
-          return RadioListTile<String>(
-            title: Text(style),
-            value: style,
-            groupValue: current,
-            onChanged: (value) {
-              if (value != null) {
-                Navigator.pop(context);
-                onSelected(value);
-              }
-            },
-          );
-        }).toList(),
+      appBar: AppBar(title: Text("Audio Settings")),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            SwitchListTile(
+              title: Text("Enable TTS"),
+              value: settings.enableTTS,
+              onChanged: (value) {
+                audioService.update(enableTTS: value);
+              },
+            ),
+            ListTile(
+              title: Text("Voice"),
+              trailing: DropdownButton<String>(
+                value: settings.voice,
+                onChanged: (value) {
+                  if (value != null) {
+                    audioService.update(voice: value);
+                  }
+                },
+                items: voiceOptions.map((voice) {
+                  return DropdownMenuItem(
+                    value: voice,
+                    child: Text(voice),
+                  );
+                }).toList(),
+              ),
+            ),
+            ListTile(
+              title: Text("Motivational Style"),
+              trailing: DropdownButton<String>(
+                value: settings.style,
+                onChanged: (value) {
+                  if (value != null) {
+                    audioService.update(style: value);
+                  }
+                },
+                items: styleOptions.map((style) {
+                  return DropdownMenuItem(
+                    value: style,
+                    child: Text(style),
+                  );
+                }).toList(),
+              ),
+            ),
+            SwitchListTile(
+              title: Text("Halfway Cue"),
+              value: settings.enableHalfwayCue,
+              onChanged: (value) {
+                audioService.update(enableHalfwayCue: value);
+              },
+            ),
+            SwitchListTile(
+              title: Text("Countdown Cue"),
+              value: settings.enableCountdownCue,
+              onChanged: (value) {
+                audioService.update(enableCountdownCue: value);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

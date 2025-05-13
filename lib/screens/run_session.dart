@@ -1,142 +1,232 @@
 import 'package:flutter/material.dart';
-import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:provider/provider.dart';
-
-import '../data/z25k_data.dart';
+import '../models/audio_settings_model.dart';
+import '../services/audio_settings_service.dart';
 import '../controllers/timer_controller.dart';
+import '../audio/audio_playback_engine.dart';
+import '../data/z25k_data.dart';
 
-class RunSessionScreen extends StatelessWidget {
+class RunSessionScreen extends StatefulWidget {
   final Workout workout;
+
   const RunSessionScreen({super.key, required this.workout});
 
-  String formatTime(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+  @override
+  State<RunSessionScreen> createState() => _RunSessionScreenState();
+}
+
+class _RunSessionScreenState extends State<RunSessionScreen> {
+  late TimerController _timerController;
+  late AudioPlaybackEngine _audioEngine;
+
+  @override
+  void initState() {
+    super.initState();
+    final audioSettingsService =
+        Provider.of<AudioSettingsService>(context, listen: false);
+
+    _audioEngine = AudioPlaybackEngine(audioSettingsService.settings);
+
+    audioSettingsService.onSettingsChanged = (newSettings) {
+      _audioEngine.reloadSettings(newSettings);
+    };
+
+    _timerController = TimerController(
+      workout: widget.workout,
+      audioEngine: _audioEngine,
+    );
   }
 
-  String intervalLabel(IntervalType type) {
+  @override
+  void dispose() {
+    _timerController.dispose();
+    _audioEngine.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return "$m:$s";
+  }
+
+  Color _intervalColor(IntervalType type) {
     switch (type) {
-      case IntervalType.warmup:
-        return 'WARMUP';
       case IntervalType.run:
-        return 'RUN';
+        return Colors.green;
       case IntervalType.walk:
-        return 'WALK';
+        return Colors.blue;
+      case IntervalType.warmup:
+        return Colors.orange;
       case IntervalType.cooldown:
-        return 'COOLDOWN';
+        return Colors.purple;
+    }
+  }
+
+  IconData _intervalIcon(IntervalType type) {
+    switch (type) {
+      case IntervalType.run:
+        return Icons.directions_run;
+      case IntervalType.walk:
+        return Icons.directions_walk;
+      case IntervalType.warmup:
+        return Icons.wb_sunny;
+      case IntervalType.cooldown:
+        return Icons.self_improvement;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => TimerController(workout)..start(),
+    return ChangeNotifierProvider.value(
+      value: _timerController,
       child: Consumer<TimerController>(
-        builder: (context, timer, child) {
+        builder: (context, timer, _) {
+          final upcoming = timer.intervals
+              .skip(timer.currentIndex + 1)
+              .take(5)
+              .toList();
+
           return Scaffold(
-            appBar: AppBar(
-              title: Text(workout.name),
-              centerTitle: true,
-            ),
-            body: Column(
-              children: [
-                // Image & Label
-                Expanded(
-                  child: Stack(
+            appBar: AppBar(title: const Text('Run Session')),
+            body: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  Text(
+                    timer.currentSegment.type.name.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  LinearProgressIndicator(
+                    value: timer.progress,
+                    minHeight: 12,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Colors.green),
+                  ),
+                  const SizedBox(height: 30),
+                  Text(
+                    _formatDuration(timer.currentSegmentRemaining),
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Image.asset(
-                        "assets/images/running.jpg",
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                      Center(
-                        child: Text(
-                          intervalLabel(timer.currentSegment.type),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                      Text("Elapsed: ${_formatDuration(timer.totalElapsedSeconds)}"),
+                      Text("Remaining: ${_formatDuration(timer.totalDuration - timer.totalElapsedSeconds)}"),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
+                  if (upcoming.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Next Intervals",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 80,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: upcoming.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 12),
+                            itemBuilder: (context, index) {
+                              final interval = upcoming[index];
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: _intervalColor(interval.type).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _intervalColor(interval.type),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _intervalIcon(interval.type),
+                                      color: _intervalColor(interval.type),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          interval.type.name.toUpperCase(),
+                                          style: TextStyle(
+                                            color: _intervalColor(interval.type),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          _formatDuration(interval.duration),
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      if (!timer.isRunning)
+                        ElevatedButton.icon(
+                          onPressed: timer.start,
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text("Start"),
+                        ),
+                      if (timer.isRunning && !timer.isPaused)
+                        ElevatedButton.icon(
+                          onPressed: timer.pause,
+                          icon: const Icon(Icons.pause),
+                          label: const Text("Pause"),
+                        ),
+                      if (timer.isRunning && timer.isPaused)
+                        ElevatedButton.icon(
+                          onPressed: timer.resume,
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text("Resume"),
+                        ),
+                      ElevatedButton.icon(
+                        onPressed: timer.stop,
+                        icon: const Icon(Icons.stop),
+                        label: const Text("Stop"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
                         ),
                       ),
                     ],
                   ),
-                ),
-
-                // Progress Bar
-                LinearPercentIndicator(
-                  percent: timer.progress.clamp(0, 1),
-                  lineHeight: 8.0,
-                  backgroundColor: Colors.grey[300],
-                  progressColor: Colors.blue,
-                  padding: const EdgeInsets.all(16),
-                ),
-
-                // Current Interval Countdown
-                Text(
-                  "Interval Remaining: ${formatTime(timer.currentSegmentRemaining)}",
-                  style: const TextStyle(fontSize: 20),
-                ),
-
-                // Elapsed / Remaining Total Time
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Column(children: [
-                        const Text("Elapsed", style: TextStyle(color: Colors.grey)),
-                        Text(formatTime(timer.totalElapsedSeconds), style: const TextStyle(fontSize: 20))
-                      ]),
-                      Column(children: [
-                        const Text("Remaining", style: TextStyle(color: Colors.grey)),
-                        Text(
-                          formatTime(timer.totalDuration - timer.totalElapsedSeconds),
-                          style: const TextStyle(fontSize: 20),
-                        )
-                      ]),
-                    ],
-                  ),
-                ),
-
-                // Controls
-                if (timer.isRunning && !timer.isPaused)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      const Icon(Icons.fast_rewind, size: 36), // Optional: skip back
-                      ElevatedButton(
-                        onPressed: timer.pause,
-                        child: const Text("PAUSE"),
-                      ),
-                      const Icon(Icons.fast_forward, size: 36), // Optional: skip ahead
-                    ],
-                  )
-                else if (timer.isRunning && timer.isPaused)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton(
-                        onPressed: timer.resume,
-                        child: const Text("RESUME"),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          timer.stop();
-                          Navigator.pop(context);
-                        },
-                        child: const Text("STOP"),
-                      ),
-                    ],
-                  ),
-
-                // Lock Button (optional for UI lock state)
-                IconButton(
-                  icon: const Icon(Icons.lock),
-                  onPressed: () {}, // implement lock toggle if needed
-                ),
-              ],
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
           );
         },

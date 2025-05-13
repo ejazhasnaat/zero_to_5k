@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../audio/audio_playback_engine.dart';
 import '../data/z25k_data.dart';
+import '../models/audio_settings_model.dart';
 
 class TimerController extends ChangeNotifier {
   final Workout workout;
-  final FlutterTts tts = FlutterTts();
+  final AudioPlaybackEngine audioEngine;
 
-  List<WorkoutInterval> intervals = [];
+  late final List<WorkoutInterval> intervals;
   int currentIndex = 0;
   int currentSegmentRemaining = 0;
   int totalElapsedSeconds = 0;
@@ -15,25 +16,22 @@ class TimerController extends ChangeNotifier {
 
   bool isRunning = false;
   bool isPaused = false;
+  bool halfwaySpoken = false;
 
-  TimerController(this.workout) {
-    intervals = workout.getIntervals();
-    currentSegmentRemaining = intervals.first.duration;
-    _initTTS();
+  TimerController({
+    required this.workout,
+    required this.audioEngine,
+  }) {
+    _initializeWorkout();
   }
 
-  Future<void> _initTTS() async {
-    await tts.setLanguage("en-US"); // Try "en-GB", "en-IN", etc.
-    await tts.setPitch(1.0); // 0.5 to 2.0
-    await tts.setSpeechRate(0.5); // 0.0 to 1.0
-    await tts.setVoice({
-      "name": "en-us-x-sfg#male_1-local",
-      "locale": "en-US"
-    });
-    await tts.setVolume(1.0); // 0.0 to 1.0
-    await _speakCurrentInterval();
-    final voices = await tts.getVoices;
-    print(voices);
+  void _initializeWorkout() {
+    intervals = workout.getIntervals();
+    currentIndex = 0;
+    totalElapsedSeconds = 0;
+    currentSegmentRemaining = intervals.first.duration;
+    halfwaySpoken = false;
+    _speakCurrentInterval();
   }
 
   WorkoutInterval get currentSegment => intervals[currentIndex];
@@ -43,6 +41,8 @@ class TimerController extends ChangeNotifier {
   double get progress => totalElapsedSeconds / totalDuration;
 
   void start() {
+    if (isRunning && !isPaused) return;
+
     isRunning = true;
     isPaused = false;
 
@@ -51,50 +51,51 @@ class TimerController extends ChangeNotifier {
   }
 
   void pause() {
+    if (!isRunning || isPaused) return;
+
     _timer?.cancel();
     isPaused = true;
     notifyListeners();
   }
 
   void resume() {
-    start(); // restart the timer
+    if (isRunning && isPaused) {
+      isPaused = false;
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+      notifyListeners();
+    }
   }
 
   void stop() {
     _timer?.cancel();
+    _timer = null;
     isRunning = false;
     isPaused = false;
-    totalElapsedSeconds = 0;
-    currentIndex = 0;
-    currentSegmentRemaining = intervals.first.duration;
+
+    audioEngine.stop();
+    _initializeWorkout();
     notifyListeners();
-  }
-
-  Future<void> _speakCurrentInterval() async {
-    final type = currentSegment.type;
-    String text;
-
-    switch (type) {
-      case IntervalType.warmup:
-        text = "Start warmup. Easy pace.";
-        break;
-      case IntervalType.run:
-        text = "Run now!";//"Start running";
-        break;
-      case IntervalType.walk:
-        text = "Walk now!";//"Start walking";
-        break;
-      case IntervalType.cooldown:
-        text = "Cooldown. You made it!";
-        break;
-    }
-
-    await tts.speak(text);
   }
 
   void _tick() {
     if (!isRunning || isPaused) return;
 
+    // Countdown cue: 5...4...3...2...1
+    if (currentSegmentRemaining <= 5 && currentSegmentRemaining > 0) {
+      audioEngine.speakCountdown(currentSegmentRemaining);
+    }
+
+    // Halfway cue (only once per segment)
+    final segmentDuration = currentSegment.duration;
+    final halfwayPoint = (segmentDuration / 2).floor();
+    if (!halfwaySpoken &&
+        currentSegmentRemaining == halfwayPoint &&
+        segmentDuration >= 10) {
+      audioEngine.speakCue(AudioCueType.halfway);
+      halfwaySpoken = true;
+    }
+
+    // Countdown logic
     if (currentSegmentRemaining > 0) {
       currentSegmentRemaining--;
       totalElapsedSeconds++;
@@ -102,13 +103,32 @@ class TimerController extends ChangeNotifier {
       if (currentIndex < intervals.length - 1) {
         currentIndex++;
         currentSegmentRemaining = intervals[currentIndex].duration;
+        halfwaySpoken = false;
         _speakCurrentInterval();
       } else {
-        stop(); // workout complete
+        audioEngine.speakCue(AudioCueType.complete);
+        stop(); // Ends workout and resets
       }
     }
 
     notifyListeners();
+  }
+
+  void _speakCurrentInterval() {
+    switch (currentSegment.type) {
+      case IntervalType.warmup:
+        audioEngine.speakCue(AudioCueType.warmup);
+        break;
+      case IntervalType.run:
+        audioEngine.speakCue(AudioCueType.run);
+        break;
+      case IntervalType.walk:
+        audioEngine.speakCue(AudioCueType.walk);
+        break;
+      case IntervalType.cooldown:
+        audioEngine.speakCue(AudioCueType.cooldown);
+        break;
+    }
   }
 }
 
