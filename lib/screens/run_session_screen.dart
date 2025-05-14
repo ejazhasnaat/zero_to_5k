@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:geolocator/geolocator.dart';
+
 import '../models/audio_settings_model.dart';
 import '../services/audio_settings_service.dart';
 import '../controllers/timer_controller.dart';
 import '../audio/audio_playback_engine.dart';
 import '../data/z25k_data.dart';
+import '../features/tracking/tracking_service.dart';
+import '../services/local_storage_service.dart';
+import '../models/run_data.dart';
 
 class RunSessionScreen extends StatefulWidget {
   final Workout workout;
@@ -18,6 +24,9 @@ class RunSessionScreen extends StatefulWidget {
 class _RunSessionScreenState extends State<RunSessionScreen> {
   late TimerController _timerController;
   late AudioPlaybackEngine _audioEngine;
+  late TrackingService _trackingService;
+  final double userWeightKg = 65.0;
+  final double userHeightCm = 175.0;
 
   @override
   void initState() {
@@ -35,12 +44,16 @@ class _RunSessionScreenState extends State<RunSessionScreen> {
       workout: widget.workout,
       audioEngine: _audioEngine,
     );
+
+    _trackingService = TrackingService(userWeightKg: userWeightKg,
+                                       userHeightCm: userHeightCm);
   }
 
   @override
   void dispose() {
     _timerController.dispose();
     _audioEngine.dispose();
+    _trackingService.stopTracking();
     super.dispose();
   }
 
@@ -74,6 +87,27 @@ class _RunSessionScreenState extends State<RunSessionScreen> {
       case IntervalType.cooldown:
         return Icons.self_improvement;
     }
+  }
+
+  Widget _buildRunStats() {
+    return ValueListenableBuilder<RunData?>(
+      valueListenable: _trackingService.runData,
+      builder: (context, data, child) {
+        if (data == null) {
+          return const Text("Waiting for GPS...", style: TextStyle(fontSize: 16));
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Distance: ${data.formattedDistance}"),
+            Text("Pace: ${data.formattedPace}"),
+            Text("Duration: ${data.formattedDuration}"),
+            Text("Calories: ${data.formattedCalories}"),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -125,17 +159,16 @@ class _RunSessionScreenState extends State<RunSessionScreen> {
                       Text("Remaining: ${_formatDuration(timer.totalDuration - timer.totalElapsedSeconds)}"),
                     ],
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 20),
+                  _buildRunStats(),
+                  const SizedBox(height: 20),
                   if (upcoming.isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           "Next Intervals",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
                         SizedBox(
@@ -159,10 +192,8 @@ class _RunSessionScreenState extends State<RunSessionScreen> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      _intervalIcon(interval.type),
-                                      color: _intervalColor(interval.type),
-                                    ),
+                                    Icon(_intervalIcon(interval.type),
+                                        color: _intervalColor(interval.type)),
                                     const SizedBox(width: 8),
                                     Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
@@ -198,7 +229,10 @@ class _RunSessionScreenState extends State<RunSessionScreen> {
                     children: [
                       if (!timer.isRunning)
                         ElevatedButton.icon(
-                          onPressed: timer.start,
+                          onPressed: () {
+                            _trackingService.startTracking();
+                            timer.start();
+                          },
                           icon: const Icon(Icons.play_arrow),
                           label: const Text("Start"),
                         ),
@@ -215,7 +249,17 @@ class _RunSessionScreenState extends State<RunSessionScreen> {
                           label: const Text("Resume"),
                         ),
                       ElevatedButton.icon(
-                        onPressed: timer.stop,
+                        onPressed: () async {
+                          timer.stop();
+                          _trackingService.stopTracking();
+                          final runData = _trackingService.runData.value;
+                          if (runData != null) {
+                            await LocalStorageService.saveRun(runData);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Run saved successfully!")),
+                            );
+                          }
+                        },
                         icon: const Icon(Icons.stop),
                         label: const Text("Stop"),
                         style: ElevatedButton.styleFrom(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:zero_to_5k/data/z25k_data.dart';
 import 'package:zero_to_5k/utils/workout_formatter.dart';
-import 'run_session.dart';
+import 'run_session_screen.dart';
 import 'package:zero_to_5k/screens/settings_screen.dart';
 
 class MainRunScreen extends StatefulWidget {
