@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_colors.dart';
-import 'screens/main_run.dart';
+import 'screens/main_run_screen.dart';
 import 'services/theme_service.dart';
 
 class ZeroTo5KApp extends StatelessWidget {

@@ -1,8 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:hive/hive.dart';
 import '../audio/audio_playback_engine.dart';
 import '../data/z25k_data.dart';
 import '../models/audio_settings_model.dart';
+import '../models/run_data.dart';
+import '../features/tracking/tracking_service.dart';
+import 'package:vibration/vibration.dart'; // Add this in pubspec.yaml
 
 class TimerController extends ChangeNotifier {
   final Workout workout;
@@ -17,6 +22,9 @@ class TimerController extends ChangeNotifier {
   bool isRunning = false;
   bool isPaused = false;
   bool halfwaySpoken = false;
+  bool _isCompleted = false;
+
+  final DateTime _startTime = DateTime.now();
 
   TimerController({
     required this.workout,
@@ -31,6 +39,7 @@ class TimerController extends ChangeNotifier {
     totalElapsedSeconds = 0;
     currentSegmentRemaining = intervals.first.duration;
     halfwaySpoken = false;
+    _isCompleted = false;
     _speakCurrentInterval();
   }
 
@@ -40,6 +49,14 @@ class TimerController extends ChangeNotifier {
 
   double get progress => totalElapsedSeconds / totalDuration;
 
+  bool get isCompleted => _isCompleted;
+
+  int get elapsedSeconds => totalElapsedSeconds;
+
+  int get remainingSeconds => totalDuration - totalElapsedSeconds;
+
+  List<WorkoutInterval> get segments => intervals;
+
   void start() {
     if (isRunning && !isPaused) return;
 
@@ -47,6 +64,7 @@ class TimerController extends ChangeNotifier {
     isPaused = false;
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    audioEngine.speakCue(AudioCueType.warmup); // Play start cue
     notifyListeners();
   }
 
@@ -66,11 +84,17 @@ class TimerController extends ChangeNotifier {
     }
   }
 
-  void stop() {
+  void stop() async {
     _timer?.cancel();
     _timer = null;
     isRunning = false;
     isPaused = false;
+
+    if (_isCompleted) {
+      final runData = await generateRunData();
+      final box = await Hive.openBox<RunData>('run_data');
+      await box.add(runData);
+    }
 
     audioEngine.stop();
     _initializeWorkout();
@@ -80,12 +104,12 @@ class TimerController extends ChangeNotifier {
   void _tick() {
     if (!isRunning || isPaused) return;
 
-    // Countdown cue: 5...4...3...2...1
+    // Countdown cue
     if (currentSegmentRemaining <= 5 && currentSegmentRemaining > 0) {
       audioEngine.speakCountdown(currentSegmentRemaining);
     }
 
-    // Halfway cue (only once per segment)
+    // Halfway cue
     final segmentDuration = currentSegment.duration;
     final halfwayPoint = (segmentDuration / 2).floor();
     if (!halfwaySpoken &&
@@ -95,7 +119,7 @@ class TimerController extends ChangeNotifier {
       halfwaySpoken = true;
     }
 
-    // Countdown logic
+    // Tick forward
     if (currentSegmentRemaining > 0) {
       currentSegmentRemaining--;
       totalElapsedSeconds++;
@@ -107,7 +131,8 @@ class TimerController extends ChangeNotifier {
         _speakCurrentInterval();
       } else {
         audioEngine.speakCue(AudioCueType.complete);
-        stop(); // Ends workout and resets
+        _isCompleted = true;
+        stop(); // Also triggers auto-save
       }
     }
 
@@ -129,6 +154,86 @@ class TimerController extends ChangeNotifier {
         audioEngine.speakCue(AudioCueType.cooldown);
         break;
     }
+  }
+
+  Future<RunData> generateRunData() async {
+    final endTime = DateTime.now();
+    final durationSeconds = totalElapsedSeconds;
+    final routePoints = await TrackingService.instance.getRoute();
+    final distanceMeters =
+        TrackingService.instance.calculateDistance(routePoints);
+    final pace = distanceMeters > 0
+        ? durationSeconds / (distanceMeters / 1000)
+        : 0;
+    final calories = 65.0 * (durationSeconds / 60.0) * 0.1;
+    final speeds =
+        TrackingService.instance.estimateSpeeds(routePoints, durationSeconds);
+    final elevation =
+        TrackingService.instance.estimateElevation(routePoints);
+
+    return RunData(
+      startTime: _startTime,
+      endTime: endTime,
+      durationSeconds: durationSeconds,
+      distanceMeters: distanceMeters,
+      paceSecondsPerKm: pace.toDouble(),
+      caloriesBurned: calories,
+      route: routePoints,
+      averageSpeedKmh: speeds['avg'],
+      maxSpeedKmh: speeds['max'],
+      elevationGainMeters: elevation['gain'],
+      elevationLossMeters: elevation['loss'],
+    );
+  }
+
+  void previousSegment() {
+    if (currentIndex > 0) {
+      currentIndex--;
+      currentSegmentRemaining = intervals[currentIndex].duration;
+      totalElapsedSeconds = intervals
+          .sublist(0, currentIndex)
+          .fold(0, (sum, i) => sum + i.duration);
+      halfwaySpoken = false;
+      _speakCurrentInterval();
+      notifyListeners();
+    }
+  }
+
+  void nextSegment() {
+    if (currentIndex < intervals.length - 1) {
+      totalElapsedSeconds += currentSegmentRemaining;
+      currentIndex++;
+      currentSegmentRemaining = intervals[currentIndex].duration;
+      halfwaySpoken = false;
+      _speakCurrentInterval();
+      notifyListeners();
+    }
+  }
+
+  /// 🚀 NEW: Jump directly to any segment and announce it with TTS, vibration, cue.
+  Future<void> jumpToSegment(int index) async {
+    if (index < 0 || index >= intervals.length) return;
+
+    pause(); // pause if running
+
+    currentIndex = index;
+    currentSegmentRemaining = intervals[index].duration;
+    totalElapsedSeconds =
+        intervals.sublist(0, index).fold(0, (sum, i) => sum + i.duration);
+    halfwaySpoken = false;
+
+    // 📢 Speak interval type
+    _speakCurrentInterval();
+
+    // 🔊 Optional: Speak "Interval changed"
+    await audioEngine.speakCue(AudioCueType.intervalChange);
+
+    // 📳 Haptic feedback
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(duration: 150);
+    }
+
+    notifyListeners();
   }
 }
 

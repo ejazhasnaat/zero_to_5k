@@ -10,7 +10,7 @@ import 'services/settings_helper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalStorageService.init();
-  await SettingsHelper.init(); // ✅ This must run before providers use it
+  await SettingsHelper.init();
 
   runApp(
     MultiProvider(
@@ -19,6 +19,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AudioSettingsService()),
         ChangeNotifierProvider(create: (_) => FeedbackSettingsService()),
       ],
+      //child: const ZeroTo5KApp(),
       child: Consumer<ThemeService>(
         builder: (context, themeService, _) {
           return MaterialApp(
