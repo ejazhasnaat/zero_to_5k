@@ -7,7 +7,7 @@ import '../data/z25k_data.dart';
 import '../models/audio_settings_model.dart';
 import '../models/run_data.dart';
 import '../features/tracking/tracking_service.dart';
-import 'package:vibration/vibration.dart'; // Add this in pubspec.yaml
+import 'package:vibration/vibration.dart';
 
 class TimerController extends ChangeNotifier {
   final Workout workout;
@@ -23,6 +23,7 @@ class TimerController extends ChangeNotifier {
   bool isPaused = false;
   bool halfwaySpoken = false;
   bool _isCompleted = false;
+  bool _isDisposed = false;
 
   final DateTime _startTime = DateTime.now();
 
@@ -47,7 +48,17 @@ class TimerController extends ChangeNotifier {
 
   int get totalDuration => intervals.fold(0, (sum, i) => sum + i.duration);
 
-  double get progress => totalElapsedSeconds / totalDuration;
+  double get progress {
+    final p = totalElapsedSeconds / totalDuration;
+    return p.clamp(0.0, 1.0);
+  }
+
+  double get currentSegmentProgress {
+    final total = currentSegment.duration;
+    if (total == 0) return 0.0;
+    final elapsed = currentSegment.duration - currentSegmentRemaining;
+    return (elapsed / total).clamp(0.0, 1.0);
+  }
 
   bool get isCompleted => _isCompleted;
 
@@ -64,8 +75,8 @@ class TimerController extends ChangeNotifier {
     isPaused = false;
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-    audioEngine.speakCue(AudioCueType.warmup); // Play start cue
-    notifyListeners();
+    audioEngine.speakCue(AudioCueType.warmup);
+    _safeNotify();
   }
 
   void pause() {
@@ -73,14 +84,14 @@ class TimerController extends ChangeNotifier {
 
     _timer?.cancel();
     isPaused = true;
-    notifyListeners();
+    _safeNotify();
   }
 
   void resume() {
     if (isRunning && isPaused) {
       isPaused = false;
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -98,18 +109,16 @@ class TimerController extends ChangeNotifier {
 
     audioEngine.stop();
     _initializeWorkout();
-    notifyListeners();
+    _safeNotify();
   }
 
   void _tick() {
     if (!isRunning || isPaused) return;
 
-    // Countdown cue
     if (currentSegmentRemaining <= 5 && currentSegmentRemaining > 0) {
       audioEngine.speakCountdown(currentSegmentRemaining);
     }
 
-    // Halfway cue
     final segmentDuration = currentSegment.duration;
     final halfwayPoint = (segmentDuration / 2).floor();
     if (!halfwaySpoken &&
@@ -119,7 +128,6 @@ class TimerController extends ChangeNotifier {
       halfwaySpoken = true;
     }
 
-    // Tick forward
     if (currentSegmentRemaining > 0) {
       currentSegmentRemaining--;
       totalElapsedSeconds++;
@@ -132,11 +140,12 @@ class TimerController extends ChangeNotifier {
       } else {
         audioEngine.speakCue(AudioCueType.complete);
         _isCompleted = true;
-        stop(); // Also triggers auto-save
+        stop();
+        return;
       }
     }
 
-    notifyListeners();
+    _safeNotify();
   }
 
   void _speakCurrentInterval() {
@@ -195,7 +204,7 @@ class TimerController extends ChangeNotifier {
           .fold(0, (sum, i) => sum + i.duration);
       halfwaySpoken = false;
       _speakCurrentInterval();
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -206,15 +215,14 @@ class TimerController extends ChangeNotifier {
       currentSegmentRemaining = intervals[currentIndex].duration;
       halfwaySpoken = false;
       _speakCurrentInterval();
-      notifyListeners();
+      _safeNotify();
     }
   }
 
-  /// 🚀 NEW: Jump directly to any segment and announce it with TTS, vibration, cue.
   Future<void> jumpToSegment(int index) async {
     if (index < 0 || index >= intervals.length) return;
 
-    pause(); // pause if running
+    pause();
 
     currentIndex = index;
     currentSegmentRemaining = intervals[index].duration;
@@ -222,18 +230,25 @@ class TimerController extends ChangeNotifier {
         intervals.sublist(0, index).fold(0, (sum, i) => sum + i.duration);
     halfwaySpoken = false;
 
-    // 📢 Speak interval type
     _speakCurrentInterval();
-
-    // 🔊 Optional: Speak "Interval changed"
     await audioEngine.speakCue(AudioCueType.intervalChange);
 
-    // 📳 Haptic feedback
     if (await Vibration.hasVibrator() ?? false) {
       Vibration.vibrate(duration: 150);
     }
 
-    notifyListeners();
+    _safeNotify();
+  }
+
+  void _safeNotify() {
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _timer?.cancel();
+    super.dispose();
   }
 }
 

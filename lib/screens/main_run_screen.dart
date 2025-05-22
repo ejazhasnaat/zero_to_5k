@@ -19,6 +19,8 @@ class MainRunScreen extends StatefulWidget {
   State<MainRunScreen> createState() => _MainRunScreenState();
 }
 
+final GlobalKey _menuKey = GlobalKey();
+
 class _MainRunScreenState extends State<MainRunScreen> {
   late Workout selectedWorkout;
   late int selectedWeekIndex;
@@ -109,39 +111,52 @@ class _MainRunScreenState extends State<MainRunScreen> {
     }
   }
 
-  void _showOptionsMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: Icon(Icons.settings, color: AppColors.calmGreen),
-            title: const Text("Settings"),
-            onTap: () {
-              if (mounted) {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-              }
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.leaderboard, color: AppColors.calmGreen),
-            title: const Text("View Leaderboard"),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardHistoryScreen()));
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
+
+  void _showOptionsMenu() {
+    final RenderBox button = _menuKey.currentContext!.findRenderObject() as RenderBox;
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          value: 'settings',
+          child: Row(
+            children: const [
+              Icon(Icons.settings, color: AppColors.calmGreen),
+              SizedBox(width: 8),
+              Text("Settings"),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'leaderboard',
+          child: Row(
+            children: const [
+              Icon(Icons.leaderboard, color: AppColors.calmGreen),
+              SizedBox(width: 8),
+              Text("View Leaderboard"),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'settings') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+      } else if (value == 'leaderboard') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardHistoryScreen()));
+      }
+    });
+  }
   void _onStartRunning() {
     final currentIndex = selectedWeekIndex * 3 + selectedDayIndex;
     if (currentIndex > lastCompletedDayIndex + 1) {
@@ -229,9 +244,9 @@ class _MainRunScreenState extends State<MainRunScreen> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert),
+            key: _menuKey, // Required for positioning
+            icon: const Icon(Icons.menu, color: Colors.black),
             onPressed: _showOptionsMenu,
-            color: Colors.white,
           ),
         ],
       ),

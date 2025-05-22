@@ -265,12 +265,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
           final current = timer.currentSegment;
           final totalDuration = timer.totalDuration;
           final elapsed = timer.elapsedSeconds;
-          final remaining = timer.remainingSeconds;
-
           final progress = (elapsed / totalDuration).clamp(0.0, 1.0);
-          final segmentProgress = current.duration == 0
-              ? 0.0
-              : ((current.duration - remaining) / current.duration).clamp(0.0, 1.0);
 
           return GestureDetector(
             onHorizontalDragEnd: (details) {
@@ -332,25 +327,22 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                           backgroundColor: AppColors.calmGreen.withOpacity(0.3),
                         ),
                       ),
-                      const SizedBox(height: 16),
-
-
+                      const SizedBox(height: 12), // slightly less vertical spacing
+                      // Interval Cards
                       SizedBox(
-                        height: 120,
+                        height: 96, // reduced from 120
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // Left Skip Button
                             IconButton(
                               onPressed: _isLocked ? null : _onSwipeRight,
                               icon: const Icon(Icons.skip_previous_rounded),
-                              iconSize: 36,
+                              iconSize: 32,
                               tooltip: "Previous Interval",
                               color: _isLocked ? Colors.grey.shade400 : AppColors.calmGreen,
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 2), // reduced spacing
 
-                            // Interval Cards ListView
                             Expanded(
                               child: AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 300),
@@ -360,37 +352,36 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                   physics: _isLocked
                                       ? const NeverScrollableScrollPhysics()
                                       : const BouncingScrollPhysics(),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8), // reduced outer padding
                                   itemCount: timer.intervals.length,
-                                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                                  separatorBuilder: (_, __) => const SizedBox(width: 8), // reduced spacing between cards
                                   itemBuilder: (context, idx) {
                                     final segment = timer.intervals[idx];
                                     final isCurrent = idx == timer.currentIndex;
                                     final isCompleted = idx < timer.currentIndex;
-
                                     return AspectRatio(
                                       aspectRatio: 1,
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 300),
                                         decoration: BoxDecoration(
                                           color: isCompleted ? Colors.grey.shade200 : Colors.white,
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(12), // slightly tighter radius
                                           border: Border.all(
                                             color: isCurrent ? AppColors.warmOrange : Colors.transparent,
-                                            width: 2.5,
+                                            width: 2,
                                           ),
                                           boxShadow: isCurrent
                                               ? [
                                                   BoxShadow(
-                                                    color: AppColors.warmOrange.withOpacity(0.4),
-                                                    blurRadius: 10,
-                                                    offset: const Offset(0, 5),
+                                                    color: AppColors.warmOrange.withOpacity(0.3),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 3),
                                                   ),
                                                 ]
                                               : [],
                                         ),
                                         child: Padding(
-                                          padding: const EdgeInsets.all(10),
+                                          padding: const EdgeInsets.all(6), // reduced inner padding
                                           child: Column(
                                             mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
@@ -407,7 +398,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                                   ),
                                                 ),
                                               ),
-                                              const SizedBox(height: 6),
+                                              const SizedBox(height: 4),
                                               Text(
                                                 _formatDuration(segment.duration),
                                                 style: TextStyle(
@@ -427,25 +418,26 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                               ),
                             ),
 
-                            const SizedBox(width: 4),
-                            // Right Skip Button
+                            const SizedBox(width: 2),
                             IconButton(
                               onPressed: _isLocked ? null : _onSwipeLeft,
                               icon: const Icon(Icons.skip_next_rounded),
-                              iconSize: 36,
+                              iconSize: 32,
                               tooltip: "Next Interval",
                               color: _isLocked ? Colors.grey.shade400 : AppColors.calmGreen,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       CircularPercentIndicator(
-                        radius: 64,
+                        radius: 54,
                         lineWidth: 10,
-                        percent: segmentProgress,
+                        percent: (1.0 -
+                            (timer.currentSegmentRemaining / timer.currentSegment.duration))
+                            .clamp(0.0, 1.0),
                         center: Text(
-                          _formatDuration(remaining),
+                          _formatDuration(timer.currentSegmentRemaining),
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -456,21 +448,74 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                         backgroundColor: Colors.grey.shade200,
                         circularStrokeCap: CircularStrokeCap.round,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "Elapsed: ${_formatDuration(elapsed)}",
-                              style: const TextStyle(fontSize: 18),
-                            ),
-                            Text(
-                              "Remaining: ${_formatDuration(totalDuration - elapsed)}",
-                              style: const TextStyle(fontSize: 18),
-                            ),
-                          ],
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: AppColors.backgroundGray,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              // Elapsed
+                              Row(
+                                children: [
+                                  const Icon(Icons.timer_outlined, size: 24, color: AppColors.calmGreen),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "Elapsed: ",
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.calmGreen,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatDuration(elapsed),
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              // Remaining
+                              Row(
+                                children: [
+                                  const Icon(Icons.hourglass_bottom, size: 24, color: AppColors.warmOrange),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "Remaining: ",
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.errorRed,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatDuration((totalDuration - elapsed).clamp(0, totalDuration)),
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const Spacer(),
