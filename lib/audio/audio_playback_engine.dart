@@ -49,6 +49,8 @@ class AudioPlaybackEngine {
         await _tts.setVoice(matchedVoice);
       }
 
+      await _tts.awaitSpeakCompletion(true); // Ensure speaking waits for completion
+
       _tts.setCompletionHandler(() {
         _isSpeaking = false;
       });
@@ -63,56 +65,60 @@ class AudioPlaybackEngine {
     await _initializeTTS();
   }
 
-  /// New method: Speak any arbitrary text
   Future<void> speak(String text) async {
-    if (!_settings.enableTTS) return;
+    if (!_settings.enableTTS || text.trim().isEmpty) return;
 
     try {
-      await _tts.stop(); // stop any current speech to avoid overlapping
+      if (_isSpeaking) {
+        await _tts.stop();
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
       await _tts.setVolume(_settings.cueVolume);
       _isSpeaking = true;
       await _tts.speak(text);
     } catch (e) {
-      debugPrint("TTS speak error: $e");
+      _isSpeaking = false;
+      debugPrint('TTS Speak Error: $e');
     }
   }
 
   Future<void> speakCue(AudioCueType type) async {
     if (!_settings.enableTTS || !_shouldSpeak(type)) return;
 
-    await _tts.stop(); // Prevent overlapping speech
+    await _tts.stop();
 
     String phrase;
     switch (type) {
       case AudioCueType.warmup:
-        phrase = _styled("Start warm-up. Easy pace.");
+        phrase = "Start your warm-up now!";
         break;
       case AudioCueType.run:
-        phrase = _styled("Run now!");
+        phrase = "Start running!";
         break;
       case AudioCueType.walk:
-        phrase = _styled("Walk now!");
+        phrase = "Start walking!";
         break;
       case AudioCueType.cooldown:
-        phrase = _styled("Cooldown. You made it!");
+        phrase = "Start your cooldown!";
         break;
       case AudioCueType.halfway:
-        phrase = _styled("Halfway there!");
+        phrase = "Halfway there!";
         break;
       case AudioCueType.complete:
-        phrase = _styled("Workout complete. Great job!");
+        phrase = "Workout completed. Great job!";
         break;
       case AudioCueType.start:
-        phrase = _styled("Let's get started.");
+        phrase = "Let's get started.";
         break;
       case AudioCueType.pause:
-        phrase = _styled("Workout paused.");
+        phrase = "Workout paused.";
         break;
       case AudioCueType.resume:
-        phrase = _styled("Resuming workout.");
+        phrase = "Resuming workout.";
         break;
       case AudioCueType.intervalChange:
-        phrase = _styled("Interval change.");
+        phrase = "Interval change.";
         break;
     }
 
@@ -121,7 +127,7 @@ class AudioPlaybackEngine {
       _isSpeaking = true;
       await _tts.speak(phrase);
     } catch (e) {
-      debugPrint("TTS speak error: $e");
+      debugPrint("TTS speakCue error: $e");
     }
   }
 
@@ -135,6 +141,19 @@ class AudioPlaybackEngine {
       } catch (e) {
         debugPrint("TTS countdown error: $e");
       }
+    }
+  }
+
+  String formatDurationReadable(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+
+    if (minutes > 0 && seconds > 0) {
+      return "$minutes minute${minutes > 1 ? 's' : ''} and $seconds second${seconds > 1 ? 's' : ''}";
+    } else if (minutes > 0) {
+      return "$minutes minute${minutes > 1 ? 's' : ''}";
+    } else {
+      return "$seconds second${seconds > 1 ? 's' : ''}";
     }
   }
 
@@ -152,17 +171,6 @@ class AudioPlaybackEngine {
         return _settings.enableIntervalChangeCue;
       default:
         return true;
-    }
-  }
-
-  String _styled(String base) {
-    switch (_settings.style.toLowerCase()) {
-      case 'energetic':
-        return "$base Let's crush it!";
-      case 'calm':
-        return "$base Stay relaxed.";
-      default:
-        return base;
     }
   }
 

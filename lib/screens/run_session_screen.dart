@@ -31,7 +31,6 @@ class RunSessionScreen extends StatefulWidget {
   @override
   State<RunSessionScreen> createState() => _RunSessionScreenState();
 }
-
 class _RunSessionScreenState extends State<RunSessionScreen> with TickerProviderStateMixin {
   late TimerController _timerController;
   late AudioPlaybackEngine _audioEngine;
@@ -43,6 +42,9 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
   bool _summaryShown = false;
   bool _isLocked = false;
   bool _isPaused = false;
+  bool _isAnimatingPage = false;
+  bool _hasSpokenInitialSegment = false;
+
 
   int _lastSegmentIndex = -1;
   Timer? _voiceDebounceTimer;
@@ -75,7 +77,15 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
       curve: Curves.easeInOut,
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _timerController.start());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _timerController.start();
+
+      // Delay initial onSegmentChange after everything has settled
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _onSegmentChange();
+        _lastSegmentIndex = _timerController.currentIndex;
+      });
+    });
 
     _timerController.addListener(() {
       final currentIndex = _timerController.currentIndex;
@@ -107,10 +117,21 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
     final type = segment.type.name;
     final duration = _formatDuration(segment.duration);
 
-    _voiceDebounceTimer?.cancel();
-    _voiceDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-      _audioEngine.speak("Next: $type for $duration");
-    });
+    debugPrint("🗣️ Segment changed to: $type ($duration)");
+
+    // Prevent duplicate speech on first segment
+    if (!_hasSpokenInitialSegment) {
+      _hasSpokenInitialSegment = true;
+      debugPrint("✅ First segment speech trigger");
+    } else {
+      _voiceDebounceTimer?.cancel();
+      _audioEngine.stop();
+
+      _voiceDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+        final _duration = _audioEngine.formatDurationReadable(Duration(seconds: segment.duration));
+        _audioEngine.speak("${segment.type.name} for $_duration");
+      });
+    }
 
     if (!_isPaused && !_isLocked) {
       Vibration.hasVibrator().then((hasVibrator) {
@@ -122,11 +143,29 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
       });
     }
 
-    _intervalPageController.animateToPage(
-      _timerController.currentIndex,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
-    );
+    final int index = _timerController.currentIndex;
+    final int maxIndex = _timerController.intervals.length - 1;
+
+    if (_intervalPageController.hasClients &&
+        !_isAnimatingPage &&
+        index >= 0 &&
+        index <= maxIndex &&
+        _intervalPageController.page?.round() != index) {
+      _isAnimatingPage = true;
+      _intervalPageController
+          .animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+          )
+          .whenComplete(() => _isAnimatingPage = false)
+          .catchError((e) {
+            debugPrint("⚠️ animateToPage error: $e");
+            _isAnimatingPage = false;
+          });
+    } else {
+      debugPrint('⚠️ Skipping animateToPage: controller not ready or invalid index: $index');
+    }
   }
 
   void _playTickingSound() {
@@ -202,6 +241,21 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
     _timerController.previousSegment();
   }
 
+  String _getImageForSegment(String name) {
+    switch (name.toLowerCase()) {
+      case 'walk':
+        return 'assets/images/walk.jpg';
+      case 'run':
+        return 'assets/images/run.jpg';
+      case 'warmup':
+        return 'assets/images/warmup.jpg';
+      case 'cooldown':
+        return 'assets/images/cooldown.jpg';
+      default:
+        return 'assets/images/running.jpg';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
@@ -247,7 +301,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                 children: [
                   Column(
                     children: [
-                      // Task 1.1: Stretched Image
+                      // Background image
                       SizedBox(
                         height: MediaQuery.of(context).size.height * 0.45,
                         child: Stack(
@@ -279,81 +333,113 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                         ),
                       ),
                       const SizedBox(height: 16),
-                      SizedBox(
-                        height: 120, // Ensures square shape with AspectRatio below
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          physics: _isLocked
-                              ? const NeverScrollableScrollPhysics()
-                              : const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: timer.intervals.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 12),
-                          itemBuilder: (context, idx) {
-                            final segment = timer.intervals[idx];
-                            final isCurrent = idx == timer.currentIndex;
-                            final isCompleted = idx < timer.currentIndex;
 
-                            return AspectRatio(
-                              aspectRatio: 1, // Enforces perfect square
-                              child: AnimatedContainer(
+
+                      SizedBox(
+                        height: 120,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Left Skip Button
+                            IconButton(
+                              onPressed: _isLocked ? null : _onSwipeRight,
+                              icon: const Icon(Icons.skip_previous_rounded),
+                              iconSize: 36,
+                              tooltip: "Previous Interval",
+                              color: _isLocked ? Colors.grey.shade400 : AppColors.calmGreen,
+                            ),
+                            const SizedBox(width: 4),
+
+                            // Interval Cards ListView
+                            Expanded(
+                              child: AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 300),
-                                decoration: BoxDecoration(
-                                  color: isCompleted ? Colors.grey.shade200 : Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isCurrent ? AppColors.warmOrange : Colors.transparent,
-                                    width: 2.5,
-                                  ),
-                                  boxShadow: isCurrent
-                                      ? [
-                                          BoxShadow(
-                                            color: AppColors.warmOrange.withOpacity(0.4),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 5),
+                                child: ListView.separated(
+                                  key: ValueKey<int>(timer.currentIndex),
+                                  scrollDirection: Axis.horizontal,
+                                  physics: _isLocked
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const BouncingScrollPhysics(),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: timer.intervals.length,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                                  itemBuilder: (context, idx) {
+                                    final segment = timer.intervals[idx];
+                                    final isCurrent = idx == timer.currentIndex;
+                                    final isCompleted = idx < timer.currentIndex;
+
+                                    return AspectRatio(
+                                      aspectRatio: 1,
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 300),
+                                        decoration: BoxDecoration(
+                                          color: isCompleted ? Colors.grey.shade200 : Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: isCurrent ? AppColors.warmOrange : Colors.transparent,
+                                            width: 2.5,
                                           ),
-                                        ]
-                                      : [],
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          segment.type.name.toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: isCurrent
-                                                ? AppColors.warmOrange
-                                                : Colors.grey.shade800,
+                                          boxShadow: isCurrent
+                                              ? [
+                                                  BoxShadow(
+                                                    color: AppColors.warmOrange.withOpacity(0.4),
+                                                    blurRadius: 10,
+                                                    offset: const Offset(0, 5),
+                                                  ),
+                                                ]
+                                              : [],
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(10),
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  segment.type.name.toUpperCase(),
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isCurrent
+                                                        ? AppColors.warmOrange
+                                                        : Colors.grey.shade800,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                _formatDuration(segment.duration),
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: isCurrent
+                                                      ? AppColors.calmGreen
+                                                      : Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _formatDuration(segment.duration),
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: isCurrent
-                                              ? AppColors.calmGreen
-                                              : Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
                               ),
-                            );
-                          },
+                            ),
+
+                            const SizedBox(width: 4),
+                            // Right Skip Button
+                            IconButton(
+                              onPressed: _isLocked ? null : _onSwipeLeft,
+                              icon: const Icon(Icons.skip_next_rounded),
+                              iconSize: 36,
+                              tooltip: "Next Interval",
+                              color: _isLocked ? Colors.grey.shade400 : AppColors.calmGreen,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // Task 1.3: Smaller rounded timer showing current interval remaining
                       CircularPercentIndicator(
                         radius: 64,
                         lineWidth: 10,
@@ -370,10 +456,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                         backgroundColor: Colors.grey.shade200,
                         circularStrokeCap: CircularStrokeCap.round,
                       ),
-
                       const SizedBox(height: 12),
-
-                      // Task 1.4: Enlarged elapsed/remaining time text
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
                         child: Row(
@@ -390,9 +473,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                           ],
                         ),
                       ),
-
                       const Spacer(),
-
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
@@ -430,6 +511,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                               elevation: 3,
                             ),
                           ),
+                          
                           ElevatedButton.icon(
                             onPressed: _isLocked
                                 ? null
@@ -442,7 +524,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.warmOrange,
+                              backgroundColor: Colors.redAccent,
                               foregroundColor: Colors.white,
                               minimumSize: const Size(140, 52),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -454,52 +536,18 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                           ),
                         ],
                       ),
-
-
-                      /*// START
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: _isLocked
-                                ? null
-                                : () {
-                                    setState(() {
-                                      if (_isPaused) {
-                                        _pauseResumeController.forward(from: 0);
-                                        _timerController.resume();
-                                      } else {
-                                        _pauseResumeController.reverse(from: 1);
-                                        _timerController.pause();
-                                      }
-                                      _isPaused = !_isPaused;
-                                    });
-                                  },
-                            icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
-                            label: Text(_isPaused ? "Resume" : "Pause"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.calmGreen,
-                              minimumSize: const Size(130, 48),
-                            ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _isLocked
-                                ? null
-                                : () async {
-                                    await _stopAndSaveRun(context);
-                                  },
-                            icon: const Icon(Icons.stop),
-                            label: const Text("Stop & Save"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.warmOrange,
-                              minimumSize: const Size(130, 48),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // END*/
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                     ],
+                  ),
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: ConfettiWidget(
+                      confettiController: _confettiController,
+                      blastDirectionality: BlastDirectionality.explosive,
+                      shouldLoop: false,
+                      numberOfParticles: 30,
+                      gravity: 0.3,
+                    ),
                   ),
                 ],
               ),
@@ -508,20 +556,5 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
         },
       ),
     );
-  }
-
-  String _getImageForSegment(String type) {
-    switch (type.toLowerCase()) {
-      case "warmup":
-        return 'assets/images/warmup.jpg';
-      case "run":
-        return 'assets/images/run.jpg';
-      case "walk":
-        return 'assets/images/walk.jpg';
-      case "cooldown":
-        return 'assets/images/cooldown.jpg';
-      default:
-        return 'assets/images/workout.jpg';
-    }
   }
 }
