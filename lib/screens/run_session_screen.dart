@@ -258,6 +258,8 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return ChangeNotifierProvider.value(
       value: _timerController,
       child: Consumer<TimerController>(
@@ -324,7 +326,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                           value: progress,
                           minHeight: 8,
                           color: AppColors.warmOrange,
-                          backgroundColor: AppColors.calmGreen.withOpacity(0.3),
+                          backgroundColor: theme.colorScheme.surface.withOpacity(0.3),
                         ),
                       ),
                       const SizedBox(height: 12), // slightly less vertical spacing
@@ -339,7 +341,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                               icon: const Icon(Icons.skip_previous_rounded),
                               iconSize: 32,
                               tooltip: "Previous Interval",
-                              color: _isLocked ? Colors.grey.shade400 : AppColors.calmGreen,
+                              color: _isLocked ? AppColors.mediumGray : theme.colorScheme.primary,
                             ),
                             const SizedBox(width: 2), // reduced spacing
 
@@ -364,7 +366,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 300),
                                         decoration: BoxDecoration(
-                                          color: isCompleted ? Colors.grey.shade200 : Colors.white,
+                                          color: isCompleted ? Theme.of(context).colorScheme.surfaceVariant : Theme.of(context).cardColor,
                                           borderRadius: BorderRadius.circular(12), // slightly tighter radius
                                           border: Border.all(
                                             color: isCurrent ? AppColors.warmOrange : Colors.transparent,
@@ -394,7 +396,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                                     fontWeight: FontWeight.w700,
                                                     color: isCurrent
                                                         ? AppColors.warmOrange
-                                                        : Colors.grey.shade800,
+                                                        : Theme.of(context).textTheme.bodyMedium?.color,
                                                   ),
                                                 ),
                                               ),
@@ -404,8 +406,8 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: isCurrent
-                                                      ? AppColors.calmGreen
-                                                      : Colors.grey.shade600,
+                                                      ? Theme.of(context).colorScheme.primary
+                                                      : Theme.of(context).textTheme.bodySmall?.color,
                                                 ),
                                               ),
                                             ],
@@ -424,7 +426,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                               icon: const Icon(Icons.skip_next_rounded),
                               iconSize: 32,
                               tooltip: "Next Interval",
-                              color: _isLocked ? Colors.grey.shade400 : AppColors.calmGreen,
+                              color: _isLocked ? AppColors.mediumGray : theme.colorScheme.primary,
                             ),
                           ],
                         ),
@@ -445,7 +447,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                           ),
                         ),
                         progressColor: AppColors.warmOrange,
-                        backgroundColor: Colors.grey.shade200,
+                        backgroundColor: AppColors.lightGray,
                         circularStrokeCap: CircularStrokeCap.round,
                       ),
                       const SizedBox(height: 10),
@@ -454,13 +456,14 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                           decoration: BoxDecoration(
-                            color: AppColors.backgroundGray,
+                            color: Theme.of(context).cardColor,//AppColors.backgroundGray,
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
+                                color: AppColors.mediumGray.withOpacity(0.02),
+                                blurRadius: 10, // was 6
+                                spreadRadius: 1.5, // added for stronger presence
+                                offset: const Offset(0, 4), // slightly deeper shadow
                               ),
                             ],
                           ),
@@ -473,19 +476,20 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                   const Icon(Icons.timer_outlined, size: 24, color: AppColors.calmGreen),
                                   const SizedBox(width: 8),
                                   Text(
-                                    "Elapsed: ",
-                                    style: const TextStyle(
+                                    "Total Elapsed: ",
+                                    style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w500,
                                       color: AppColors.calmGreen,
                                     ),
                                   ),
+                                  const SizedBox(width: 8), // Adjust width as needed
                                   Text(
                                     _formatDuration(elapsed),
-                                    style: const TextStyle(
-                                      fontSize: 20,
+                                    style: TextStyle(
+                                      fontSize: 24,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.black,
+                                      color: Theme.of(context).colorScheme.onSurface,
                                     ),
                                   ),
                                 ],
@@ -497,19 +501,20 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                                   const Icon(Icons.hourglass_bottom, size: 24, color: AppColors.warmOrange),
                                   const SizedBox(width: 8),
                                   Text(
-                                    "Remaining: ",
+                                    "Total Remaining: ",
                                     style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w500,
-                                      color: AppColors.errorRed,
+                                      color: AppColors.warmOrange,
                                     ),
                                   ),
+                                  const SizedBox(width: 8), // Adjust width as needed
                                   Text(
                                     _formatDuration((totalDuration - elapsed).clamp(0, totalDuration)),
-                                    style: const TextStyle(
-                                      fontSize: 20,
+                                    style: TextStyle(
+                                      fontSize: 24,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.black,
+                                      color: Theme.of(context).colorScheme.onSurface,
                                     ),
                                   ),
                                 ],
@@ -547,7 +552,7 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.calmGreen,
-                              foregroundColor: Colors.white,
+                              foregroundColor: Theme.of(context).colorScheme.onPrimary,
                               minimumSize: const Size(140, 52),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               shape: RoundedRectangleBorder(
@@ -569,8 +574,8 @@ class _RunSessionScreenState extends State<RunSessionScreen> with TickerProvider
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent,
-                              foregroundColor: Colors.white,
+                              backgroundColor: AppColors.warmOrange,
+                              foregroundColor: Theme.of(context).colorScheme.onError,
                               minimumSize: const Size(140, 52),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               shape: RoundedRectangleBorder(

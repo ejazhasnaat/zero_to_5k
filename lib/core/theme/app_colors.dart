@@ -7,6 +7,8 @@ class AppColors {
 
   // Background colors
   static const Color backgroundGray = Color(0xFFF7F9F9); // Very light gray for backgrounds
+  static const Color lightGray = Color(0xFFD3D3D3); // Light gray
+  static const Color mediumGray = Color(0xFF808080); // Medium gray
 
   // Text colors
   static const Color textPrimary = Color(0xFF263238);   // Dark slate gray for primary text
