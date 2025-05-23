@@ -99,6 +99,7 @@ flutter:
     - assets/images/cooldown.jpg
     - assets/images/workout.jpg
     - assets/audio/tick.mp3
+    - assets/audio/swipe.mp3
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a

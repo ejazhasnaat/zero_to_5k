@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:confetti/confetti.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../data/z25k_data.dart';
 import '../utils/workout_formatter.dart';
@@ -29,6 +30,9 @@ class _MainRunScreenState extends State<MainRunScreen> {
 
   final double cardWidth = 90.0;
   final double cardHeight = 90.0;
+  final PageController _pageController = PageController(viewportFraction: 0.28);
+  final AudioPlayer audioPlayer = AudioPlayer();
+
   int lastCompletedDayIndex = -1;
   bool isLoading = true;
 
@@ -38,12 +42,20 @@ class _MainRunScreenState extends State<MainRunScreen> {
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _scrollController = ScrollController();
     _loadProgress();
+
+    // Jump to initial page in center
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final initialPage = selectedWeekIndex * 3 + selectedDayIndex;
+      _pageController.jumpToPage(initialPage);
+    });
   }
 
   @override
   void dispose() {
     _confettiController.dispose();
     _scrollController.dispose();
+    _pageController.dispose();
+    audioPlayer.dispose();
     super.dispose();
   }
 
@@ -74,6 +86,23 @@ class _MainRunScreenState extends State<MainRunScreen> {
         _confettiController.play();
         _saveProgress();
       }
+    });
+  }
+
+  Future<void> _playSwipeSound() async {
+    try {
+      await audioPlayer.play(AssetSource('audio/swipe.mp3')); // Add this to assets
+    } catch (_) {
+      // Ignore errors silently
+    }
+  }
+
+  void _onDayPageChanged(int index) {
+    _playSwipeSound();
+    setState(() {
+      selectedWeekIndex = index ~/ 3;
+      selectedDayIndex = index % 3;
+      selectedWorkout = Z25KProgram.weeks[selectedWeekIndex][selectedDayIndex];
     });
   }
 
@@ -349,9 +378,164 @@ class _MainRunScreenState extends State<MainRunScreen> {
                   ],
                 ),
               ),
-
               // Day Selector with Navigation Arrows
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left, color: AppColors.calmGreen),
+                      onPressed: () => _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      ),
+                    ),
+                    Expanded(
+                      child: SizedBox(
+                        height: cardHeight,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: dayLabels.length,
+                          onPageChanged: _onDayPageChanged,
+                          itemBuilder: (context, index) {
+                            final isSelected = index == selectedWeekIndex * 3 + selectedDayIndex;
+                            final isCompleted = index <= lastCompletedDayIndex;
 
+                            final cardColor = isSelected
+                                ? AppColors.calmGreen
+                                : isCompleted
+                                    ? colorScheme.secondary
+                                    : theme.cardColor;
+
+                            final textColor = isSelected || isCompleted
+                                ? colorScheme.onPrimary
+                                : theme.textTheme.bodyMedium?.color;
+
+                            return GestureDetector(
+                              onTap: () {
+                                _pageController.animateToPage(
+                                  index,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                                width: cardWidth,
+                                height: cardWidth, // ✅ Square cards
+                                decoration: BoxDecoration(
+                                  color: cardColor,
+                                  border: Border.all(color: AppColors.calmGreen, width: 2), // ✅ Always calmGreen
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: AppColors.calmGreen.withOpacity(0.4),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          )
+                                        ]
+                                      : [],
+                                ),
+                                padding: const EdgeInsets.all(12),
+                                child: Center(
+                                  child: Text(
+                                    dayLabels[index],
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right, color: AppColors.calmGreen),
+                      onPressed: () => _pageController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+
+              /* OLD
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: SizedBox(
+                  height: cardHeight,
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: dayLabels.length,
+                    onPageChanged: _onDayPageChanged,
+                    itemBuilder: (context, index) {
+                      final isSelected = index == selectedWeekIndex * 3 + selectedDayIndex;
+                      final isCompleted = index <= lastCompletedDayIndex;
+
+                      final cardColor = isSelected
+                          ? AppColors.calmGreen
+                          : isCompleted
+                              ? colorScheme.secondary
+                              : theme.cardColor;
+
+                      final textColor = isSelected || isCompleted
+                          ? colorScheme.onPrimary
+                          : theme.textTheme.bodyMedium?.color;
+
+                      return GestureDetector(
+                        onTap: () {
+                          _pageController.animateToPage(
+                            index,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          margin: const EdgeInsets.symmetric(horizontal: 6),
+                          width: cardWidth,
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            border: Border.all(color: AppColors.calmGreen, width: 2),
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.calmGreen.withOpacity(0.4),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    )
+                                  ]
+                                : [],
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          child: Center(
+                            child: Text(
+                              dayLabels[index],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              */
+              /* Older
               GestureDetector(
                 onHorizontalDragEnd: (details) {
                   if (details.primaryVelocity == null) return;
@@ -446,85 +630,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                   ),
                 ),
               ),
-
-
-              /*
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.arrow_back_ios, color: AppColors.calmGreen),
-                      onPressed: () => _navigateDay(-1),
-                    ),
-                    Expanded(
-                      child: SizedBox(
-                        height: cardHeight,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          scrollDirection: Axis.horizontal,
-                          itemCount: dayLabels.length,
-                          itemBuilder: (context, index) {
-                            final isSelected = (index == selectedWeekIndex * 3 + selectedDayIndex);
-                            final isCompleted = (index <= lastCompletedDayIndex);
-                            final cardColor = isSelected
-                                ? AppColors.calmGreen
-                                : isCompleted
-                                    ? colorScheme.secondary
-                                    : theme.cardColor;
-                            final textColor = isSelected || isCompleted
-                                ? colorScheme.onPrimary
-                                : theme.textTheme.bodyMedium?.color;
-
-                            return GestureDetector(
-                              onTap: () => _onDayCardTap(index),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                width: cardWidth,
-                                margin: const EdgeInsets.symmetric(horizontal: 6),
-                                decoration: BoxDecoration(
-                                  color: cardColor,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: AppColors.calmGreen,
-                                    width: isSelected ? 2.5 : 1.5,
-                                  ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: AppColors.calmGreen.withOpacity(0.4),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 4),
-                                          )
-                                        ]
-                                      : [],
-                                ),
-                                padding: const EdgeInsets.all(12),
-                                child: Center(
-                                  child: Text(
-                                    dayLabels[index],
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.arrow_forward_ios, color: AppColors.calmGreen),
-                      onPressed: () => _navigateDay(1),
-                    ),
-                  ],
-                ),
-              ),
               */
+
             ],
           ),
 
