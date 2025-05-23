@@ -351,6 +351,104 @@ class _MainRunScreenState extends State<MainRunScreen> {
               ),
 
               // Day Selector with Navigation Arrows
+
+              GestureDetector(
+                onHorizontalDragEnd: (details) {
+                  if (details.primaryVelocity == null) return;
+
+                  if (details.primaryVelocity! < 0) {
+                    _navigateDay(1); // Swipe left → next
+                  } else if (details.primaryVelocity! > 0) {
+                    _navigateDay(-1); // Swipe right → previous
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.chevron_left, size: 28, color: AppColors.calmGreen),
+                        onPressed: () => _navigateDay(-1),
+                      ),
+                      Expanded(
+                        child: SizedBox(
+                          height: cardHeight,
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            scrollDirection: Axis.horizontal,
+                            itemCount: dayLabels.length,
+                            itemBuilder: (context, index) {
+                              final isSelected = (index == selectedWeekIndex * 3 + selectedDayIndex);
+                              final isCompleted = (index <= lastCompletedDayIndex);
+
+                              final cardColor = isSelected
+                                  ? AppColors.calmGreen
+                                  : isCompleted
+                                      ? colorScheme.secondary.withOpacity(0.15)
+                                      : theme.cardColor;
+
+                              final borderColor = isSelected
+                                  ? AppColors.calmGreen
+                                  : isCompleted
+                                      ? AppColors.warmOrange
+                                      : Colors.grey.shade300;
+
+                              final textColor = isSelected || isCompleted
+                                  ? colorScheme.onPrimary
+                                  : theme.textTheme.bodyMedium?.color;
+
+                              return GestureDetector(
+                                onTap: () => _onDayCardTap(index),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  width: cardWidth,
+                                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                                  decoration: BoxDecoration(
+                                    color: cardColor,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: borderColor,
+                                      width: isSelected ? 2.5 : 1.5,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: AppColors.calmGreen.withOpacity(0.3),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 4),
+                                            )
+                                          ]
+                                        : [],
+                                  ),
+                                  padding: const EdgeInsets.all(12),
+                                  child: Center(
+                                    child: Text(
+                                      dayLabels[index],
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.chevron_right, size: 28, color: AppColors.calmGreen),
+                        onPressed: () => _navigateDay(1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+
+              /*
               Padding(
                 padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
                 child: Row(
@@ -426,6 +524,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                   ],
                 ),
               ),
+              */
             ],
           ),
 
