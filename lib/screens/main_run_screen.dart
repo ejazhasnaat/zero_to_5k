@@ -4,9 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:confetti/confetti.dart';
 
-import 'package:zero_to_5k/core/theme/app_colors.dart';
-import 'package:zero_to_5k/data/z25k_data.dart';
-import 'package:zero_to_5k/utils/workout_formatter.dart';
+import '../data/z25k_data.dart';
+import '../utils/workout_formatter.dart';
 import '../core/theme/app_colors.dart';
 import 'run_session_screen.dart';
 import 'settings_screen.dart';
@@ -111,8 +110,6 @@ class _MainRunScreenState extends State<MainRunScreen> {
     }
   }
 
-
-
   void _showOptionsMenu() {
     final RenderBox button = _menuKey.currentContext!.findRenderObject() as RenderBox;
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -157,6 +154,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
       }
     });
   }
+
   void _onStartRunning() {
     final currentIndex = selectedWeekIndex * 3 + selectedDayIndex;
     if (currentIndex > lastCompletedDayIndex + 1) {
@@ -180,6 +178,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
   }
 
   void _showSkipStartDialog() {
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -191,19 +190,15 @@ class _MainRunScreenState extends State<MainRunScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text("Cancel", style: TextStyle(color: AppColors.calmGreen)),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text("Cancel", style: TextStyle(color: colorScheme.primary)),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                if (mounted) {
-                  _navigateToRunSession();
-                }
+                if (mounted) _navigateToRunSession();
               },
-              child: Text("Start Anyway", style: TextStyle(color: AppColors.warmOrange)),
+              child: Text("Start Anyway", style: TextStyle(color: colorScheme.secondary)),
             ),
           ],
         );
@@ -213,14 +208,16 @@ class _MainRunScreenState extends State<MainRunScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (isLoading) {
       return Scaffold(
-        backgroundColor: AppColors.backgroundGray,
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    final theme = Theme.of(context);
     final dayLabels = <String>[];
     final workouts = <Workout>[];
 
@@ -236,7 +233,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
     final progress = completedDays / totalDays;
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundGray,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("Zero to 5K"),
         centerTitle: true,
@@ -244,7 +241,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
         elevation: 0,
         actions: [
           IconButton(
-            key: _menuKey, // Required for positioning
+            key: _menuKey,
             icon: const Icon(Icons.menu, color: Colors.black),
             onPressed: _showOptionsMenu,
           ),
@@ -258,7 +255,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 child: Card(
-                  color: AppColors.cardBackground,
+                  color: theme.cardColor,
                   elevation: 2,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: Padding(
@@ -273,10 +270,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             Flexible(
                               child: Text(
                                 "Duration: ${getTotalWorkoutTime(selectedWorkout)} min",
-                                style: TextStyle(
+                                style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                  color: AppColors.textSecondary,
                                 ),
                               ),
                             ),
@@ -291,11 +286,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             Expanded(
                               child: Text(
                                 formatWorkoutDescription(selectedWorkout),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: AppColors.textPrimary,
-                                  height: 1.4,
-                                ),
+                                style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
                               ),
                             ),
                           ],
@@ -328,8 +319,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                   children: [
                     LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: AppColors.progressBackground,
-                      color: AppColors.progressForeground,
+                      backgroundColor: colorScheme.surfaceVariant,
+                      color: colorScheme.primary,
                       minHeight: 10,
                     ),
                     const SizedBox(height: 16),
@@ -344,12 +335,12 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           "Start Workout",
-                          style: TextStyle(
+                          style: theme.textTheme.labelLarge?.copyWith(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: colorScheme.onPrimary,
                             letterSpacing: 1.1,
                           ),
                         ),
@@ -378,6 +369,14 @@ class _MainRunScreenState extends State<MainRunScreen> {
                           itemBuilder: (context, index) {
                             final isSelected = (index == selectedWeekIndex * 3 + selectedDayIndex);
                             final isCompleted = (index <= lastCompletedDayIndex);
+                            final cardColor = isSelected
+                                ? AppColors.calmGreen
+                                : isCompleted
+                                    ? colorScheme.secondary
+                                    : theme.cardColor;
+                            final textColor = isSelected || isCompleted
+                                ? colorScheme.onPrimary
+                                : theme.textTheme.bodyMedium?.color;
 
                             return GestureDetector(
                               onTap: () => _onDayCardTap(index),
@@ -386,12 +385,12 @@ class _MainRunScreenState extends State<MainRunScreen> {
                                 width: cardWidth,
                                 margin: const EdgeInsets.symmetric(horizontal: 6),
                                 decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppColors.calmGreen
-                                      : isCompleted
-                                          ? AppColors.progressForeground
-                                          : AppColors.cardBackground,
+                                  color: cardColor,
                                   borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: AppColors.calmGreen,
+                                    width: isSelected ? 2.5 : 1.5,
+                                  ),
                                   boxShadow: isSelected
                                       ? [
                                           BoxShadow(
@@ -408,9 +407,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                                     dayLabels[index],
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                      color: isSelected || isCompleted
-                                          ? Colors.white
-                                          : AppColors.textPrimary,
+                                      color: textColor,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
                                     ),
@@ -439,7 +436,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
               confettiController: _confettiController,
               blastDirectionality: BlastDirectionality.explosive,
               shouldLoop: false,
-              colors: const [AppColors.warmOrange, AppColors.calmGreen, Colors.white],
+              colors: [colorScheme.secondary, colorScheme.primary, Colors.white],
               numberOfParticles: 30,
               maxBlastForce: 30,
               minBlastForce: 10,
